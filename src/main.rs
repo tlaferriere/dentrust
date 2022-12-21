@@ -2,14 +2,28 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 use eframe::{HardwareAcceleration, Theme};
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
+use tokio;
+use tokio::runtime::Runtime;
+
+#[tokio::main]
+async fn backend() {}
 
 // When compiling natively:
 #[cfg(not(target_arch = "wasm32"))]
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Log to stdout (if you run with `RUST_LOG=debug`).
     tracing_subscriber::fmt::init();
 
+    let (chan_back, chan_front) = dentrust::app::app_channels();
+
+    let rt = Runtime::new()?;
+    let spawner = rt.handle().clone();
+
     let native_options = eframe::NativeOptions {
+        // Just copied these settings from the web, feel free to change and play around to get live results
         always_on_top: false,
         maximized: false,
         decorated: true,
@@ -35,13 +49,15 @@ fn main() {
     eframe::run_native(
         "DenTrust",
         native_options,
-        Box::new(|cc| Box::new(dentrust::DentrustApp::new(cc))),
+        Box::new(|cc| Box::new(dentrust::DentrustApp::new(cc, spawner))),
     );
+    Ok(())
 }
 
 // when compiling to web using trunk.
 #[cfg(target_arch = "wasm32")]
-fn main() {
+#[tokio::main]
+async fn main() {
     // Make sure panics are logged using `console.error`.
     console_error_panic_hook::set_once();
 

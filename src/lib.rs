@@ -1,5 +1,6 @@
 #![warn(clippy::all, rust_2018_idioms)]
 
-mod app;
+pub mod app;
 mod apps;
 pub use app::DentrustApp;
+mod models;

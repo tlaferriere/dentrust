@@ -1,3 +1,48 @@
+use crate::models::Id;
+use tokio::sync::watch;
+
+pub fn app_channels() -> (ChannelsBackend, ChannelsFrontend) {
+    let (patient_names_backend, patient_names_frontend) = watch::channel(vec![]);
+    (
+        ChannelsBackend {
+            patient_names: patient_names_backend,
+        },
+        ChannelsFrontend {
+            patient_names: patient_names_frontend,
+        },
+    )
+}
+
+pub struct ChannelsBackend {
+    patient_names: watch::Sender<Vec<String>>,
+}
+
+pub struct ChannelsFrontend {
+    patient_names: watch::Receiver<Vec<String>>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(default)] // if we add new fields, give them default values when deserializing old state
+struct PatientName {
+    id: usize,
+    name: String,
+}
+
+impl Id for PatientName {
+    fn id(&self) -> usize {
+        self.id
+    }
+}
+
+impl Default for PatientName {
+    fn default() -> Self {
+        Self {
+            id: 1,
+            name: "Johnny Boy!".into(),
+        }
+    }
+}
+
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
@@ -8,6 +53,9 @@ pub struct PatientFiles {
     // this how you opt-out of serialization of a member
     #[serde(skip)]
     value: f32,
+
+    selected_patient: usize,
+    patient_names: Vec<PatientName>,
 }
 
 impl Default for PatientFiles {
@@ -16,6 +64,17 @@ impl Default for PatientFiles {
             // Example stuff:
             label: "Hello World!".to_owned(),
             value: 2.7,
+            patient_names: vec![
+                PatientName {
+                    id: 1,
+                    name: "Jean".into(),
+                },
+                PatientName {
+                    id: 2,
+                    name: "Paul".into(),
+                },
+            ],
+            selected_patient: 1,
         }
     }
 }
@@ -34,6 +93,20 @@ impl PatientFiles {
 
         Default::default()
     }
+
+    fn sidebar_contents(&mut self, ui: &mut egui::Ui) {
+        let mut selected_patient: usize = self.selected_patient.to_owned();
+
+        for name in &self.patient_names {
+            if ui
+                .selectable_label(name.id() == selected_patient, &name.name)
+                .clicked()
+            {
+                selected_patient = name.id;
+            }
+        }
+        self.selected_patient = selected_patient;
+    }
 }
 
 impl eframe::App for PatientFiles {
@@ -45,51 +118,19 @@ impl eframe::App for PatientFiles {
     /// Called each time the UI needs repainting, which may be many times per second.
     /// Put your widgets into a `SidePanel`, `TopPanel`, `CentralPanel`, `Window` or `Area`.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let Self { label, value } = self;
-
         // Examples of how to create different panels and windows.
         // Pick whichever suits you.
         // Tip: a good default choice is to just keep the `CentralPanel`.
         // For inspiration and more examples, go to https://emilk.github.io/egui
 
         egui::SidePanel::left("side_panel").show(ctx, |ui| {
-            ui.heading("Side Panel");
+            // ui.heading("Side Panel");
 
-            ui.horizontal(|ui| {
-                ui.label("Write something: ");
-                ui.text_edit_singleline(label);
-            });
-
-            ui.add(egui::Slider::new(value, 0.0..=10.0).text("value"));
-            if ui.button("Increment").clicked() {
-                *value += 1.0;
-            }
-
-            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.label("powered by ");
-                    ui.hyperlink_to("egui", "https://github.com/emilk/egui");
-                    ui.label(" and ");
-                    ui.hyperlink_to(
-                        "eframe",
-                        "https://github.com/emilk/egui/tree/master/crates/eframe",
-                    );
-                    ui.label(".");
-                });
-            });
+            ui.vertical(|ui| self.sidebar_contents(ui));
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // The central panel the region left after adding TopPanel's and SidePanel's
-
-            ui.heading("eframe template");
-            ui.hyperlink("https://github.com/emilk/eframe_template");
-            ui.add(egui::github_link_file!(
-                "https://github.com/emilk/eframe_template/blob/master/",
-                "Source code."
-            ));
-            egui::warn_if_debug_build(ui);
         });
 
         if false {

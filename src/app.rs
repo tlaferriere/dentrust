@@ -1,9 +1,31 @@
-use crate::apps::{Agenda, Billing, Management, PatientFiles};
+use crate::apps::{patient_files, Agenda, Billing, Management, PatientFiles};
 use eframe::App;
+use std::sync::Arc;
 
 use strum::EnumIter;
 use strum::EnumMessage;
 use strum::IntoEnumIterator;
+use tokio::runtime::{Handle, Runtime};
+
+pub fn app_channels() -> (ChannelsBackend, ChannelsFrontend) {
+    let (patient_files_back, patient_files_front) = patient_files::app_channels();
+    (
+        ChannelsBackend {
+            patient_files: patient_files_back,
+        },
+        ChannelsFrontend {
+            patient_files: patient_files_front,
+        },
+    )
+}
+
+pub struct ChannelsBackend {
+    patient_files: patient_files::ChannelsBackend,
+}
+
+pub struct ChannelsFrontend {
+    patient_files: patient_files::ChannelsFrontend,
+}
 
 #[derive(EnumIter, serde::Deserialize, serde::Serialize, PartialEq, Clone)]
 enum TabAnchor {
@@ -36,6 +58,9 @@ impl TabAnchor {
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct DentrustApp {
+    #[serde(skip)]
+    spawner: Handle,
+
     files: PatientFiles,
     agenda: Agenda,
     billing: Billing,
@@ -46,6 +71,7 @@ pub struct DentrustApp {
 impl Default for DentrustApp {
     fn default() -> Self {
         Self {
+            spawner: Handle::current(),
             files: PatientFiles::default(),
             agenda: Agenda::default(),
             billing: Billing::default(),
@@ -55,16 +81,18 @@ impl Default for DentrustApp {
     }
 }
 
+pub(crate) const APP_KEY: &str = "Dentrust";
+
 impl DentrustApp {
     /// Called once before the first frame.
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, spawner: Handle) -> Self {
         // This is also where you can customized the look at feel of egui using
         // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
 
         // Load previous app state (if any).
         // Note that you must enable the `persistence` feature for this to work.
         if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+            return eframe::get_value(storage, APP_KEY).unwrap_or_default();
         }
 
         Default::default()
